@@ -12,11 +12,13 @@ import com.jan1ooo.apicep.repository.SetupRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.NoSuchElementException;
 
 @Service
 public class CorreiosService {
@@ -32,16 +34,23 @@ public class CorreiosService {
     @Autowired
     private SetupRepository setupRepository;
 
+    @Value("${setup.on.startup}")
+    private boolean setupOnStartup;
+
     public Status getStatus(){
         return this.addressStatusRepository.findById(AddressStatus.DEFAULT_ID)
                 .orElse(AddressStatus.builder().status(Status.NEED_SETUP).build()).getStatus();
     }
 
     public Address getAddressByZipCode(String zipcode){
-        if(!this.getStatus().equals(Status.READY)){
-            throw new NotReadyException("Service in installation, please wait for 5 minutes");
+        try {
+            if (!this.getStatus().equals(Status.READY)) {
+                throw new NotReadyException("Service in installation, please wait for 5 minutes");
+            }
+            return addressRepository.findById(zipcode).get();
+        }catch (NoSuchElementException e){
+            throw new NoContentException("No content with zip code: " + zipcode);
         }
-        return addressRepository.findById(zipcode).get();
     }
 
     private void saveStatus(Status status){
@@ -53,6 +62,8 @@ public class CorreiosService {
 
     @EventListener(ApplicationStartedEvent.class)
     protected void setupOnStartup(){
+        if(!setupOnStartup) return;
+
         try{
             this.setup();
         }catch (Exception e){
